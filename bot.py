@@ -9,7 +9,12 @@ from bs4 import BeautifulSoup
 
 SUBREDDIT = os.environ.get("SUBREDDIT", "SquaredCircle")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")  # فقط خودت
+
+# لیست دو تا CHAT_ID (با کاما جدا کن)
+CHAT_IDS = [
+    8956194322,    # اکانت اول (خودت)
+    1386381987     # اکانت دوم (دوستت)
+]
 
 translator = GoogleTranslator(source='auto', target='fa')
 
@@ -48,11 +53,11 @@ def get_new_posts():
         })
     return posts
 
-def send_to_telegram(title, summary, link):
+def send_to_telegram(chat_id, title, summary, link):
     message = f"📝 {title}\n\n{summary}\n\n{link}"
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {
-        'chat_id': CHAT_ID,
+        'chat_id': chat_id,
         'text': message,
         'disable_web_page_preview': True
     }
@@ -68,10 +73,16 @@ def main():
     print(f"{len(posts)} پست پیدا شد")
     
     for post in posts:
+        print(f"ترجمه: {post['title'][:40]}...")
         title_fa = translate_text(post['title'])
         summary_fa = translate_text(post['summary'])
-        send_to_telegram(title_fa, summary_fa, post['link'])
-        print(f"✓ {post['title'][:30]}...")
+        
+        # ارسال برای هر دو اکانت
+        for chat_id in CHAT_IDS:
+            send_to_telegram(chat_id, title_fa, summary_fa, post['link'])
+            print(f"✓ ارسال شد به {chat_id}")
+            time.sleep(1)
+        
         time.sleep(2)
     
     print("پایان")
