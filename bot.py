@@ -11,24 +11,28 @@ from bs4 import BeautifulSoup
 SUBREDDIT = os.environ.get("SUBREDDIT", "SquaredCircle")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# لیست دو تا CHAT_ID
 CHAT_IDS = [
     8956194322,
     1386381987
 ]
 
 translator = GoogleTranslator(source='auto', target='fa')
-LAST_POSTS_FILE = "last_posts.txt"
+SENT_POSTS_FILE = "sent_posts.json"
 
-def get_last_post_ids():
-    if os.path.exists(LAST_POSTS_FILE):
-        with open(LAST_POSTS_FILE, 'r') as f:
-            return set(line.strip() for line in f.readlines())
-    return set()
+def load_sent_posts():
+    """بارگذاری لیست پست‌های ارسال شده"""
+    if os.path.exists(SENT_POSTS_FILE):
+        try:
+            with open(SENT_POSTS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
 
-def save_post_id(post_id):
-    with open(LAST_POSTS_FILE, 'a') as f:
-        f.write(f"{post_id}\n")
+def save_sent_posts(sent_posts):
+    """ذخیره لیست پست‌های ارسال شده"""
+    with open(SENT_POSTS_FILE, 'w') as f:
+        json.dump(sent_posts, f)
 
 def clean_html(text):
     if not text:
@@ -45,7 +49,6 @@ def clean_html(text):
     return text
 
 def extract_image_url(entry):
-    """پیدا کردن آدرس عکس"""
     if hasattr(entry, 'summary'):
         soup = BeautifulSoup(entry.summary, 'html.parser')
         img_tag = soup.find('img')
@@ -82,33 +85,42 @@ def translate_text(text):
 def get_new_posts():
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
-    last_ids = get_last_post_ids()
+    sent_posts = load_sent_posts()
     new_posts = []
     
     for entry in feed.entries[:10]:
-        if entry.id not in last_ids:
+        post_link = entry.link
+        # اگه این لینک قبلاً فرستاده نشده بود
+        if post_link not in sent_posts:
             new_posts.append({
                 'id': entry.id,
                 'title': entry.title,
-                'link': entry.link,
+                'link': post_link,
                 'summary': entry.summary,
                 'image_url': extract_image_url(entry)
             })
-    return new_posts
+    
+    return new_posts, sent_posts
+
+def send_notification(chat_id, message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        'chat_id': chat_id,
+        'text': message,
+        'disable_web_page_preview': True
+    }
+    try:
+        requests.post(url, data=data, timeout=30)
+    except:
+        pass
 
 def send_to_user(chat_id, title, summary, link, image_url=None):
-    """ارسال پست با عکس و لینک به صورت (لینک)"""
-    
-    # لینک به صورت (لینک)
     link_text = f"[(لینک)]({link})"
-    
-    # ساخت متن پیام
     message = f"📝 {title}\n\n"
     if summary and len(summary) > 5:
         message += f"{summary}\n\n"
     message += link_text
     
-    # ارسال عکس (اگه داشته باشه)
     if image_url:
         photo_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
         photo_data = {
@@ -118,13 +130,11 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
             'parse_mode': 'Markdown'
         }
         try:
-            response = requests.post(photo_url, data=photo_data, timeout=30)
-            if response.ok:
-                return True
+            requests.post(photo_url, data=photo_data, timeout=30)
+            return True
         except:
             pass
     
-    # اگه عکس نداشت یا ارسال عکس failed، فقط متن بفرست
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {
         'chat_id': chat_id,
@@ -136,7 +146,6 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         requests.post(url, data=data, timeout=30)
         return True
     except:
-        # اگه Markdown مشکل داشت، بدون فرمت بفرست
         data['parse_mode'] = None
         requests.post(url, data=data, timeout=30)
         return True
@@ -145,13 +154,16 @@ def main():
     print(f"🤖 شروع - {datetime.now()}")
     print(f"بررسی r/{SUBREDDIT}")
     
-    posts = get_new_posts()
-    print(f"{len(posts)} پست جدید پیدا شد")
+    posts, sent_posts = get_new_posts()
+    print(f"پست‌های جدید: {len(posts)}")
     
     if not posts:
         print("پست جدیدی نیست")
+        for chat_id in CHAT_IDS:
+            send_notification(chat_id, "📭 **هیچ پست جدیدی منتشر نشده است.**")
         return
     
+    # ارسال پست‌های جدید
     for post in posts:
         print(f"ترجمه: {post['title'][:40]}...")
         title_fa = translate_text(post['title'])
@@ -162,7 +174,10 @@ def main():
                 send_to_user(chat_id, title_fa, summary_fa, post['link'], post['image_url'])
                 print(f"✓ ارسال شد به {chat_id}")
                 time.sleep(1)
-            save_post_id(post['id'])
+            
+            # ذخیره لینک به عنوان ارسال شده
+            sent_posts[post['link']] = datetime.now().isoformat()
+            save_sent_posts(sent_posts)
         time.sleep(2)
     
     print("پایان")
