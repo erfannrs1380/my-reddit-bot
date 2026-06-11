@@ -17,6 +17,9 @@ CHAT_IDS = [
 
 translator = GoogleTranslator(source='auto', target='fa')
 
+# ذخیره آخرین لینک ارسال شده (در حافظه همین اجرا)
+last_sent_link = None
+
 def clean_html(text):
     if not text:
         return ""
@@ -65,19 +68,26 @@ def translate_text(text):
     except:
         return text
 
-def get_all_posts():
+def get_latest_normal_post():
+    """گرفتن آخرین پست معمولی (نه پین شده)"""
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
-    posts = []
-    for entry in feed.entries[:10]:
-        posts.append({
+    
+    for entry in feed.entries[:15]:  # ۱۵ تای اول رو چک کن
+        # بررسی نکردن پست‌های پین شده
+        if hasattr(entry, 'sticky') and entry.sticky == 'true':
+            print(f"⏭️ رد شد (پست پین شده): {entry.title[:40]}...")
+            continue
+        
+        return {
             'title': entry.title,
             'link': entry.link,
             'summary': entry.summary,
             'image_url': extract_image_url(entry),
             'published': entry.get('published', '')
-        })
-    return posts
+        }
+    
+    return None
 
 def send_notification(chat_id, message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -128,31 +138,40 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         return True
 
 def main():
+    global last_sent_link
+    
     print(f"🤖 شروع - {datetime.now()}")
+    print(f"بررسی r/{SUBREDDIT}")
     
-    current_posts = get_all_posts()
-    print(f"تعداد کل پست‌های RSS: {len(current_posts)}")
+    post = get_latest_normal_post()
     
-    if not current_posts:
-        print("هیچ پستی یافت نشد")
+    if not post:
+        print("هیچ پست معمولی (غیر پین شده‌ای) یافت نشد")
         for chat_id in CHAT_IDS:
             send_notification(chat_id, "📭 **هیچ پست جدیدی منتشر نشده است.**")
         return
     
-    latest_post = current_posts[0]
-    print(f"آخرین پست: {latest_post['title'][:40]}...")
+    # چک کردن تکراری (بر اساس لینک)
+    if post['link'] == last_sent_link:
+        print("این پست قبلاً فرستاده شده بود")
+        for chat_id in CHAT_IDS:
+            send_notification(chat_id, "📭 **هیچ پست جدیدی منتشر نشده است.**")
+        return
+    
+    print(f"آخرین پست معمولی: {post['title'][:40]}...")
     
     for chat_id in CHAT_IDS:
         send_to_user(
             chat_id,
-            translate_text(latest_post['title']),
-            translate_text(latest_post['summary']) if latest_post['summary'] else "",
-            latest_post['link'],
-            latest_post['image_url']
+            translate_text(post['title']),
+            translate_text(post['summary']) if post['summary'] else "",
+            post['link'],
+            post['image_url']
         )
         print(f"✓ ارسال شد به {chat_id}")
         time.sleep(1)
     
+    last_sent_link = post['link']
     print("پایان")
 
 if __name__ == "__main__":
