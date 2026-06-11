@@ -97,12 +97,16 @@ def get_new_posts():
     return new_posts
 
 def send_to_user(chat_id, title, summary, link, image_url=None):
-    """ارسال پست با عکس و دکمه شیشه‌ای"""
+    """ارسال پست با عکس و لینک به صورت (لینک)"""
+    
+    # لینک به صورت (لینک)
+    link_text = f"[(لینک)]({link})"
     
     # ساخت متن پیام
     message = f"📝 {title}\n\n"
     if summary and len(summary) > 5:
         message += f"{summary}\n\n"
+    message += link_text
     
     # ارسال عکس (اگه داشته باشه)
     if image_url:
@@ -110,45 +114,32 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         photo_data = {
             'chat_id': chat_id,
             'photo': image_url,
-            'caption': message  # متن زیر عکس
+            'caption': message,
+            'parse_mode': 'Markdown'
         }
         try:
             response = requests.post(photo_url, data=photo_data, timeout=30)
             if response.ok:
-                # بعد از عکس، دکمه رو بفرست
-                send_inline_button(chat_id, link)
                 return True
         except:
             pass
     
-    # اگه عکس نداشت یا ارسال عکس failed، فقط متن با دکمه بفرست
-    send_inline_button(chat_id, link, message)
-    return True
-
-def send_inline_button(chat_id, link, caption=None):
-    """ارسال دکمه شیشه‌ای با لینک"""
+    # اگه عکس نداشت یا ارسال عکس failed، فقط متن بفرست
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    
-    # دکمه شیشه‌ای
-    keyboard = {
-        "inline_keyboard": [
-            [{"text": "🔗 لینک در ردیت", "url": link}]
-        ]
-    }
-    
-    text = caption if caption else "🔗 برای مشاهده کلیک کن"
-    
     data = {
         'chat_id': chat_id,
-        'text': text,
-        'reply_markup': json.dumps(keyboard),
+        'text': message,
+        'parse_mode': 'Markdown',
         'disable_web_page_preview': True
     }
-    
     try:
         requests.post(url, data=data, timeout=30)
+        return True
     except:
-        pass
+        # اگه Markdown مشکل داشت، بدون فرمت بفرست
+        data['parse_mode'] = None
+        requests.post(url, data=data, timeout=30)
+        return True
 
 def main():
     print(f"🤖 شروع - {datetime.now()}")
