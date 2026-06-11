@@ -2,13 +2,18 @@ import os
 import feedparser
 import requests
 import time
+import re
 from datetime import datetime
+from deep_translator import GoogleTranslator
 
 # تنظیمات
 SUBREDDIT = os.environ.get("SUBREDDIT", "AskReddit")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 LAST_POSTS_FILE = "last_posts.txt"
+
+# مترجم
+translator = GoogleTranslator(source='auto', target='fa')
 
 def get_last_post_ids():
     if os.path.exists(LAST_POSTS_FILE):
@@ -19,6 +24,25 @@ def get_last_post_ids():
 def save_post_id(post_id):
     with open(LAST_POSTS_FILE, 'a') as f:
         f.write(f"{post_id}\n")
+
+def clean_html(text):
+    """حذف تگ‌های HTML و کاراکترهای اضافی"""
+    text = re.sub('<[^<]+?>', '', text)
+    text = re.sub(r'&#\d+;', '', text)
+    text = text.replace('&#32;', ' ')
+    return text.strip()
+
+def translate_text(text):
+    """ترجمه از انگلیسی به فارسی"""
+    try:
+        text = clean_html(text)
+        if len(text) > 4000:
+            text = text[:4000] + "..."
+        translated = translator.translate(text)
+        return translated
+    except Exception as e:
+        print(f"خطا در ترجمه: {e}")
+        return text
 
 def get_new_posts():
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
@@ -38,13 +62,8 @@ def get_new_posts():
     return new_posts
 
 def send_to_telegram(title, summary, link):
-    # حذف تگ‌های HTML از متن
-    import re
-    clean_summary = re.sub('<[^<]+?>', '', summary)
-    if len(clean_summary) > 1000:
-        clean_summary = clean_summary[:1000] + "..."
-    
-    message = f"📝 {title}\n\n{clean_summary}\n\n🔗 {link}"
+    """ارسال پست ترجمه شده به تلگرام"""
+    message = f"📝 {title}\n\n{summary}\n\n🔗 {link}"
     
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {
@@ -57,26 +76,33 @@ def send_to_telegram(title, summary, link):
         response = requests.post(url, data=data, timeout=30)
         return response.ok
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"خطا در ارسال: {e}")
         return False
 
 def main():
-    print(f"🤖 Bot running - {datetime.now()}")
-    print(f"Subreddit: r/{SUBREDDIT}")
+    print(f"🤖 ربات در حال اجرا - {datetime.now()}")
+    print(f"در حال بررسی سابردیت r/{SUBREDDIT}")
     
     posts = get_new_posts()
-    print(f"New posts found: {len(posts)}")
+    print(f"پست‌های جدید: {len(posts)}")
     
     for post in posts:
-        print(f"Sending: {post['title'][:50]}...")
-        if send_to_telegram(post['title'], post['summary'], post['link']):
-            print("✓ Sent")
+        print(f"در حال ترجمه: {post['title'][:40]}...")
+        
+        # ترجمه عنوان و متن
+        title_fa = translate_text(post['title'])
+        summary_fa = translate_text(post['summary'])
+        
+        print(f"ارسال به تلگرام...")
+        if send_to_telegram(title_fa, summary_fa, post['link']):
+            print("✓ ارسال شد")
             save_post_id(post['id'])
         else:
-            print("✗ Failed")
+            print("✗ خطا در ارسال")
+        
         time.sleep(2)
     
-    print("Done")
+    print("پایان")
 
 if __name__ == "__main__":
     main()
