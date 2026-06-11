@@ -3,7 +3,6 @@ import feedparser
 import requests
 import time
 import re
-import json
 from datetime import datetime
 from deep_translator import GoogleTranslator
 from bs4 import BeautifulSoup
@@ -17,22 +16,19 @@ CHAT_IDS = [
 ]
 
 translator = GoogleTranslator(source='auto', target='fa')
-SENT_POSTS_FILE = "sent_posts.json"
+SENT_LINKS_FILE = "sent_links.txt"
 
-def load_sent_posts():
-    """بارگذاری لیست پست‌های ارسال شده"""
-    if os.path.exists(SENT_POSTS_FILE):
-        try:
-            with open(SENT_POSTS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
+def load_sent_links():
+    """بارگذاری لینک‌های ارسال شده از فایل متنی"""
+    if os.path.exists(SENT_LINKS_FILE):
+        with open(SENT_LINKS_FILE, 'r') as f:
+            return set(line.strip() for line in f.readlines())
+    return set()
 
-def save_sent_posts(sent_posts):
-    """ذخیره لیست پست‌های ارسال شده"""
-    with open(SENT_POSTS_FILE, 'w') as f:
-        json.dump(sent_posts, f)
+def save_sent_link(link):
+    """ذخیره لینک ارسال شده"""
+    with open(SENT_LINKS_FILE, 'a') as f:
+        f.write(f"{link}\n")
 
 def clean_html(text):
     if not text:
@@ -85,22 +81,20 @@ def translate_text(text):
 def get_new_posts():
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
-    sent_posts = load_sent_posts()
+    sent_links = load_sent_links()
     new_posts = []
     
     for entry in feed.entries[:10]:
         post_link = entry.link
-        # اگه این لینک قبلاً فرستاده نشده بود
-        if post_link not in sent_posts:
+        if post_link not in sent_links:
             new_posts.append({
-                'id': entry.id,
                 'title': entry.title,
                 'link': post_link,
                 'summary': entry.summary,
                 'image_url': extract_image_url(entry)
             })
     
-    return new_posts, sent_posts
+    return new_posts
 
 def send_notification(chat_id, message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -154,7 +148,7 @@ def main():
     print(f"🤖 شروع - {datetime.now()}")
     print(f"بررسی r/{SUBREDDIT}")
     
-    posts, sent_posts = get_new_posts()
+    posts = get_new_posts()
     print(f"پست‌های جدید: {len(posts)}")
     
     if not posts:
@@ -163,7 +157,6 @@ def main():
             send_notification(chat_id, "📭 **هیچ پست جدیدی منتشر نشده است.**")
         return
     
-    # ارسال پست‌های جدید
     for post in posts:
         print(f"ترجمه: {post['title'][:40]}...")
         title_fa = translate_text(post['title'])
@@ -174,10 +167,8 @@ def main():
                 send_to_user(chat_id, title_fa, summary_fa, post['link'], post['image_url'])
                 print(f"✓ ارسال شد به {chat_id}")
                 time.sleep(1)
-            
-            # ذخیره لینک به عنوان ارسال شده
-            sent_posts[post['link']] = datetime.now().isoformat()
-            save_sent_posts(sent_posts)
+            save_sent_link(post['link'])
+            print(f"✓ لینک ذخیره شد: {post['link']}")
         time.sleep(2)
     
     print("پایان")
