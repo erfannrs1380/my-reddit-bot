@@ -17,32 +17,25 @@ LAST_POSTS_FILE = "last_posts.txt"
 # مترجم
 translator = GoogleTranslator(source='auto', target='fa')
 
-# ========== مدیریت کاربران ==========
 def load_users():
-    """بارگذاری لیست کاربران از فایل"""
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, 'r') as f:
             return set(json.load(f))
     return set()
 
 def save_users(users):
-    """ذخیره لیست کاربران در فایل"""
     with open(USERS_FILE, 'w') as f:
         json.dump(list(users), f)
 
 def add_user(chat_id):
-    """اضافه کردن کاربر جدید"""
     users = load_users()
     if chat_id not in users:
         users.add(chat_id)
         save_users(users)
-        print(f"کاربر جدید اضافه شد: {chat_id}")
         return True
     return False
 
-# ========== مدیریت پیام‌های دریافتی ==========
 def handle_updates():
-    """بررسی پیام‌های جدید تلگرام و پردازش /start"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
     try:
         response = requests.get(url, timeout=30)
@@ -53,40 +46,21 @@ def handle_updates():
                     if 'message' in update:
                         chat_id = update['message']['chat']['id']
                         text = update['message'].get('text', '')
-                        
                         if text == '/start':
                             if add_user(chat_id):
-                                send_message(chat_id, "✅ شما با موفقیت به ربات متصل شدید!\n\nهر ۲ ساعت یکبار جدیدترین پست‌های r/{SUBREDDIT} براتون ارسال می‌شه.")
-                        
-                        # حذف این آپدیت از صف تا دوباره ارسال نشه
+                                send_message(chat_id, "✅ شما به ربات متصل شدید!\n\nهر ۲ ساعت پست‌های جدید فرستاده می‌شه.")
                         update_id = update['update_id']
                         requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={update_id+1}")
     except Exception as e:
-        print(f"خطا در دریافت پیام‌ها: {e}")
+        print(f"خطا: {e}")
 
 def send_message(chat_id, text):
-    """ارسال پیام به یک کاربر خاص"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {
-        'chat_id': chat_id,
-        'text': text,
-        'disable_web_page_preview': True
-    }
+    data = {'chat_id': chat_id, 'text': text, 'disable_web_page_preview': True}
     try:
         requests.post(url, data=data, timeout=30)
     except:
         pass
-
-# ========== توابع قبلی (با کمی تغییر) ==========
-def get_last_post_ids():
-    if os.path.exists(LAST_POSTS_FILE):
-        with open(LAST_POSTS_FILE, 'r') as f:
-            return set(line.strip() for line in f.readlines())
-    return set()
-
-def save_post_id(post_id):
-    with open(LAST_POSTS_FILE, 'a') as f:
-        f.write(f"{post_id}\n")
 
 def clean_html(text):
     if not text:
@@ -97,8 +71,13 @@ def clean_html(text):
     text = text.replace('\n', ' ')
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'submitted by\s+/\w+', '', text)
+    text = re.sub(r'Posted by\s+\w+', '', text)
     text = re.sub(r'/u/\w+', '', text)
     text = re.sub(r'u/\w+', '', text)
+    text = re.sub(r'by\s+\w+', '', text)
+    text = re.sub(r'\|\s*\d+\s*votes?\s*', '', text)
+    text = re.sub(r'\d+\s*comments?', '', text)
+    text = re.sub(r'From the \w+ community on Reddit:', '', text)
     text = re.sub(r'\[link\]\s*\[comments\]', '', text)
     text = text.strip()
     return text
@@ -124,7 +103,8 @@ def translate_text(text):
             return ""
         if len(text) > 1500:
             text = text[:1500] + "..."
-        return translator.translate(text)
+        translated = translator.translate(text)
+        return translated
     except Exception as e:
         print(f"خطا در ترجمه: {e}")
         return text
@@ -132,8 +112,10 @@ def translate_text(text):
 def get_new_posts():
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
+    
     last_ids = get_last_post_ids()
     new_posts = []
+    
     for entry in feed.entries[:10]:
         if entry.id not in last_ids:
             new_posts.append({
@@ -145,64 +127,98 @@ def get_new_posts():
             })
     return new_posts
 
+def get_last_post_ids():
+    if os.path.exists(LAST_POSTS_FILE):
+        with open(LAST_POSTS_FILE, 'r') as f:
+            return set(line.strip() for line in f.readlines())
+    return set()
+
+def save_post_id(post_id):
+    with open(LAST_POSTS_FILE, 'a') as f:
+        f.write(f"{post_id}\n")
+
 def send_to_user(chat_id, title, summary, link, image_url=None):
-    """ارسال پست به یک کاربر"""
+    """ارسال پست - عکس بدون بلور"""
+    
+    # ساخت پیام متنی
     message_parts = [f"📝 {title}"]
+    
     if summary and len(summary) > 5:
         message_parts.append("")
         message_parts.append(summary)
+    
     message_parts.append("")
-    message_parts.append(link)
+    message_parts.append(f"🔗 [لینک در ردیت]({link})")
+    
     message = "\n".join(message_parts)
     
+    # ارسال عکس (بدون بلور - عادی)
     if image_url:
         photo_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-        requests.post(photo_url, data={'chat_id': chat_id, 'photo': image_url}, timeout=30)
+        photo_data = {
+            'chat_id': chat_id,
+            'photo': image_url
+            # has_spoiler حذف شد - عکس بلور نمیشه
+        }
+        
+        try:
+            requests.post(photo_url, data=photo_data, timeout=30)
+        except Exception as e:
+            print(f"خطا در ارسال عکس: {e}")
     
+    # ارسال متن
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {'chat_id': chat_id, 'text': message, 'disable_web_page_preview': False}
+    data = {
+        'chat_id': chat_id,
+        'text': message,
+        'parse_mode': 'Markdown',
+        'disable_web_page_preview': True
+    }
+    
     try:
         response = requests.post(url, data=data, timeout=30)
         return response.ok
     except:
-        return False
+        data['parse_mode'] = None
+        try:
+            response = requests.post(url, data=data, timeout=30)
+            return response.ok
+        except:
+            return False
 
 def main():
     print(f"🤖 ربات در حال اجرا - {datetime.now()}")
     
-    # مرحله 1: بررسی کاربران جدید
-    print("بررسی پیام‌های جدید تلگرام...")
+    print("بررسی پیام‌های جدید...")
     handle_updates()
     
-    # مرحله 2: دریافت پست‌های جدید
-    print(f"در حال بررسی سابردیت r/{SUBREDDIT}")
+    print(f"بررسی r/{SUBREDDIT}")
     posts = get_new_posts()
     print(f"پست‌های جدید: {len(posts)}")
     
     if not posts:
-        print("هیچ پست جدیدی یافت نشد")
+        print("پست جدیدی نیست")
         return
     
-    # مرحله 3: بارگذاری لیست کاربران
     users = load_users()
-    print(f"تعداد کاربران فعال: {len(users)}")
+    print(f"تعداد کاربران: {len(users)}")
     
     if not users:
-        print("هیچ کاربری ثبت نشده است")
+        print("هیچ کاربری ثبت نشده")
         return
     
-    # مرحله 4: ارسال پست برای همه کاربران
     for post in posts:
         print(f"ترجمه: {post['title'][:40]}...")
+        
         title_fa = translate_text(post['title'])
         summary_fa = translate_text(post['summary']) if post['summary'] else ""
         
         if title_fa:
             for user_id in users:
                 send_to_user(user_id, title_fa, summary_fa, post['link'], post['image_url'])
-                time.sleep(0.5)  # کمی تاخیر بین ارسال به کاربران مختلف
+                time.sleep(0.5)
             save_post_id(post['id'])
-            print(f"✓ پست برای {len(users)} کاربر ارسال شد")
+            print(f"✓ ارسال شد برای {len(users)} کاربر")
         time.sleep(2)
     
     print("پایان")
