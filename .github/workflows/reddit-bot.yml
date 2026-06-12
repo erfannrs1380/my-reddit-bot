@@ -29,6 +29,12 @@ jobs:
       - name: Install dependencies
         run: pip install feedparser requests deep-translator beautifulsoup4
 
+      - name: Debug last_post
+        run: |
+          echo "------ FILE ------"
+          cat last_post.txt || echo "file not found"
+          echo "------------------"
+
       - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
