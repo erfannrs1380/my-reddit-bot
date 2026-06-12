@@ -8,6 +8,8 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
@@ -42,10 +44,21 @@ jobs:
           SUBREDDIT: ${{ secrets.SUBREDDIT }}
         run: python bot.py
 
+      - name: Check git status
+        run: |
+          git status
+          cat last_post.txt
+
       - name: Commit last_post.txt
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
+          
           git add last_post.txt
+          
+          echo "===== STATUS ====="
+          git status
+          
           git diff --cached --quiet || git commit -m "Update last post"
+          
           git push
