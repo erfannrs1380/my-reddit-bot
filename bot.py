@@ -21,7 +21,7 @@ else:
     CHAT_IDS = [8956194322, 1386381987]
 
 translator = GoogleTranslator(source='auto', target='fa')
-LAST_POSTS_FILE = "last_posts.txt"
+LAST_POST_FILE = "last_post.txt"  # تغییر: فایل برای ذخیره آخرین پست
 
 # چک کردن اولیه
 print(f"🤖 شروع ربات Reddit به تلگرام - {datetime.now()}")
@@ -38,21 +38,17 @@ if not CHAT_IDS:
 
 # =================================================
 
-def get_last_post_ids():
-    """خواندن آیدی پست‌های قبلی از فایل کش"""
-    if os.path.exists(LAST_POSTS_FILE):
-        with open(LAST_POSTS_FILE, 'r') as f:
-            return {line.strip() for line in f if line.strip()}
-    return set()
+def get_last_post():
+    """خواندن آخرین پست ذخیره شده از فایل"""
+    if os.path.exists(LAST_POST_FILE):
+        with open(LAST_POST_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
 
-def save_post_ids(new_ids):
-    """ذخیره آیدی پست‌های جدید در فایل کش"""
-    if not new_ids:
-        return
-    with open(LAST_POSTS_FILE, 'a') as f:
-        for pid in new_ids:
-            f.write(f"{pid}\n")
-    print(f"💾 {len(new_ids)} پست جدید ذخیره شد")
+def save_last_post(post_id):
+    """ذخیره آخرین پست در فایل"""
+    with open(LAST_POST_FILE, "w", encoding="utf-8") as f:
+        f.write(post_id)
 
 def clean_html(text):
     """پاک کردن HTML و متن‌های اضافی"""
@@ -151,64 +147,70 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         except:
             return False
 
-def get_new_posts():
-    """گرفتن پست‌های جدید از RSS ردیت"""
+def get_latest_post():
+    """گرفتن آخرین پست از RSS ردیت"""
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
-    last_ids = get_last_post_ids()
-    new_posts = []
     
-    for entry in feed.entries[:20]:  # بررسی ۲۰ پست آخر
-        if entry.id not in last_ids:
-            # رد کردن پست‌های پین شده
-            title_lower = entry.title.lower()
-            if any(word in title_lower for word in ['pinned', 'daily discussion', 'wreddit\'s daily', 'discussion thread']):
-                print(f"⏭️ رد شد (پین شده): {entry.title[:40]}...")
-                continue
-            
-            new_posts.append({
-                'id': entry.id,
-                'title': entry.title,
-                'link': entry.link,
-                'summary': entry.get('summary', ''),
-                'image_url': extract_image_url(entry)
-            })
-    return new_posts
+    if not feed.entries:
+        return None
+    
+    entry = feed.entries[0]
+    
+    # رد کردن پست‌های پین شده
+    title_lower = entry.title.lower()
+    if any(word in title_lower for word in ['pinned', 'daily discussion', 'wreddit\'s daily', 'discussion thread']):
+        print(f"⏭️ آخرین پست پین شده است، اسکیپ می‌شود: {entry.title[:40]}...")
+        return None
+    
+    return {
+        'id': entry.id,
+        'title': entry.title,
+        'link': entry.link,
+        'summary': entry.get('summary', ''),
+        'image_url': extract_image_url(entry)
+    }
 
 def main():
     """تابع اصلی"""
-    posts = get_new_posts()
-    print(f"📊 {len(posts)} پست جدید پیدا شد")
+    latest = get_latest_post()
     
-    if not posts:
+    if not latest:
+        print("❌ هیچ پست معتبری پیدا نشد")
+        return
+    
+    last_saved = get_last_post()
+    
+    print(f"📌 آخرین پست RSS: {latest['id']}")
+    print(f"📌 آخرین پست ذخیره شده: {last_saved}")
+    
+    if latest["id"] == last_saved:
         print("✅ پست جدیدی وجود ندارد")
         return
-
-    new_ids = []
-    for post in posts:
-        print(f"🔄 پردازش: {post['title'][:70]}...")
-        
-        title_fa = translate_text(post['title'])
-        summary_fa = translate_text(post['summary']) if post.get('summary') else ""
-        
-        if not title_fa:
-            print("   ⚠️ ترجمه عنوان انجام نشد")
-            continue
-            
-        success_count = 0
-        for chat_id in CHAT_IDS:
-            if send_to_user(chat_id, title_fa, summary_fa, post['link'], post['image_url']):
-                print(f"   ✅ ارسال شد به {chat_id}")
-                success_count += 1
-            time.sleep(1.5)  # جلوگیری از rate limit تلگرام
-        
-        if success_count > 0:
-            new_ids.append(post['id'])
-            print(f"   💾 آیدی پست ذخیره شد")
-        time.sleep(2)
-
-    save_post_ids(new_ids)
-    print("🎉 اجرای ربات با موفقیت تمام شد")
+    
+    print(f"🔄 ارسال پست جدید: {latest['title'][:60]}...")
+    
+    title_fa = translate_text(latest['title'])
+    summary_fa = translate_text(latest['summary'])
+    
+    success_count = 0
+    for chat_id in CHAT_IDS:
+        if send_to_user(
+            chat_id,
+            title_fa,
+            summary_fa,
+            latest['link'],
+            latest['image_url']
+        ):
+            print(f"   ✅ ارسال شد به {chat_id}")
+            success_count += 1
+        time.sleep(1.5)
+    
+    if success_count > 0:
+        save_last_post(latest["id"])
+        print(f"💾 آخرین پست ذخیره شد (ID: {latest['id']})")
+    
+    print("🎉 پایان")
 
 if __name__ == "__main__":
     main()
