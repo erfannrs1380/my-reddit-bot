@@ -2,28 +2,37 @@ name: Reddit to Telegram Bot
 
 on:
   schedule:
-    - cron: '0 3-23/3 * * *'
-
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      # === این بخش جدید: Cache برای last_posts.txt ===
+      - name: Cache last posts file
+        uses: actions/cache@v4
+        with:
+          path: last_posts.txt
+          key: reddit-last-posts-${{ github.ref }}
+          restore-keys: |
+            reddit-last-posts-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
-        run: pip install feedparser requests deep-translator
-      
+        run: pip install feedparser requests deep-translator beautifulsoup4
+
       - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
+          CHAT_IDS: ${{ secrets.CHAT_IDS }}   # بهتره اینو هم به secret منتقل کنی
           SUBREDDIT: ${{ secrets.SUBREDDIT }}
         run: python bot.py
