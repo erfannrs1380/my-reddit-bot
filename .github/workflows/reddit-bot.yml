@@ -13,13 +13,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache last posts file
+      - name: Cache last post file
         uses: actions/cache@v4
         with:
-          path: last_posts.txt
-          key: reddit-last-posts-${{ github.ref }}
+          path: last_post.txt
+          key: reddit-last-post-${{ github.ref }}
           restore-keys: |
-            reddit-last-posts-
+            reddit-last-post-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,3 +35,11 @@ jobs:
           CHAT_IDS: ${{ secrets.CHAT_IDS }}
           SUBREDDIT: ${{ secrets.SUBREDDIT }}
         run: python bot.py
+
+      - name: Commit last_post.txt
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add last_post.txt
+          git diff --cached --quiet || git commit -m "Update last post"
+          git push
