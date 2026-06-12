@@ -49,6 +49,11 @@ jobs:
           SUBREDDIT: ${{ secrets.SUBREDDIT }}
         run: python bot.py
 
+      - name: Debug paths
+        run: |
+          pwd
+          find . -name "last_post.txt"
+
       - name: Check git status
         run: |
           git status
