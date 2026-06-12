@@ -217,6 +217,11 @@ def main():
     if success_count > 0:
         save_last_post(latest["id"])
         print(f"💾 آخرین پست ذخیره شد (ID: {latest['id']})")
+        
+        # دیباگ: نمایش محتوای فایل بعد از ذخیره
+        print("Saving:", latest["id"])
+        with open("last_post.txt", "r", encoding="utf-8") as f:
+            print("FILE CONTENT:", repr(f.read()))
     
     print("🎉 پایان")
 
