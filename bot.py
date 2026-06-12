@@ -21,7 +21,7 @@ else:
     CHAT_IDS = [8956194322, 1386381987]
 
 translator = GoogleTranslator(source='auto', target='fa')
-LAST_POST_FILE = "last_post.txt"  # تغییر: فایل برای ذخیره آخرین پست
+LAST_POST_FILE = "last_post.txt"
 
 # چک کردن اولیه
 print(f"🤖 شروع ربات Reddit به تلگرام - {datetime.now()}")
@@ -124,7 +124,7 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
             if response.ok:
                 return True
         except:
-            pass  # اگر ارسال عکس شکست خورد، متن را ارسال می‌کنیم
+            pass
 
     # ارسال متن ساده
     try:
@@ -139,7 +139,6 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         return True
     except Exception as e:
         print(f"❌ خطا در ارسال به {chat_id}: {e}")
-        # ارسال بدون Markdown
         try:
             data['parse_mode'] = None
             requests.post(url, data=data, timeout=25)
@@ -148,35 +147,44 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
             return False
 
 def get_latest_post():
-    """گرفتن آخرین پست از RSS ردیت"""
+    """گرفتن آخرین پست عادی (غیر پین شده) از RSS ردیت"""
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
     
     if not feed.entries:
         return None
     
-    entry = feed.entries[0]
+    # بررسی ۲۰ پست اول
+    for entry in feed.entries[:20]:
+        title_lower = entry.title.lower()
+        
+        # رد کردن پست‌های پین شده
+        if any(word in title_lower for word in [
+            'pinned',
+            'daily discussion',
+            'discussion thread',
+            "wreddit's daily"
+        ]):
+            print(f"⏭️ پست پین شده رد شد: {entry.title[:40]}")
+            continue
+        
+        # اولین پست عادی را برمی‌گرداند
+        return {
+            'id': entry.id,
+            'title': entry.title,
+            'link': entry.link,
+            'summary': entry.get('summary', ''),
+            'image_url': extract_image_url(entry)
+        }
     
-    # رد کردن پست‌های پین شده
-    title_lower = entry.title.lower()
-    if any(word in title_lower for word in ['pinned', 'daily discussion', 'wreddit\'s daily', 'discussion thread']):
-        print(f"⏭️ آخرین پست پین شده است، اسکیپ می‌شود: {entry.title[:40]}...")
-        return None
-    
-    return {
-        'id': entry.id,
-        'title': entry.title,
-        'link': entry.link,
-        'summary': entry.get('summary', ''),
-        'image_url': extract_image_url(entry)
-    }
+    return None
 
 def main():
     """تابع اصلی"""
     latest = get_latest_post()
     
     if not latest:
-        print("❌ هیچ پست معتبری پیدا نشد")
+        print("❌ هیچ پست معتبری (غیر پین شده) پیدا نشد")
         return
     
     last_saved = get_last_post()
