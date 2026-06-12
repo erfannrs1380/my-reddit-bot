@@ -8,15 +8,12 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,10 +34,9 @@ jobs:
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
+          
           git add last_post.txt
-
-          if ! git diff --cached --quiet; then
-            git commit -m "Update last post"
-            git push
-          fi
+          
+          git diff --cached --quiet || git commit -m "Update last post"
+          
+          git push
