@@ -146,16 +146,15 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         except:
             return False
 
-def get_latest_post():
-    """گرفتن آخرین پست عادی (غیر پین شده) از RSS ردیت"""
+def get_new_posts():
+    """گرفتن پست‌های جدید از RSS ردیت"""
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
     
-    if not feed.entries:
-        return None
+    last_saved = get_last_post()
+    new_posts = []
     
-    # بررسی ۲۰ پست اول
-    for entry in feed.entries[:20]:
+    for entry in feed.entries:
         title_lower = entry.title.lower()
         
         # رد کردن پست‌های پین شده
@@ -165,58 +164,64 @@ def get_latest_post():
             'discussion thread',
             "wreddit's daily"
         ]):
-            print(f"⏭️ پست پین شده رد شد: {entry.title[:40]}")
             continue
         
-        # اولین پست عادی را برمی‌گرداند
-        return {
+        # اگر به پست ذخیره شده رسیدیم، متوقف شو
+        if entry.id == last_saved:
+            break
+        
+        new_posts.append({
             'id': entry.id,
             'title': entry.title,
             'link': entry.link,
             'summary': entry.get('summary', ''),
             'image_url': extract_image_url(entry)
-        }
+        })
     
-    return None
+    # برگرداندن پست‌ها از قدیم به جدید
+    return list(reversed(new_posts))
 
 def main():
     """تابع اصلی"""
-    latest = get_latest_post()
+    new_posts = get_new_posts()
     
-    if not latest:
-        print("❌ هیچ پست معتبری (غیر پین شده) پیدا نشد")
-        return
-    
-    last_saved = get_last_post()
-    
-    print(f"📌 آخرین پست RSS: {latest['id']}")
-    print(f"📌 آخرین پست ذخیره شده: {last_saved}")
-    
-    if latest["id"] == last_saved:
+    if not new_posts:
         print("✅ پست جدیدی وجود ندارد")
         return
     
-    print(f"🔄 ارسال پست جدید: {latest['title'][:60]}...")
+    print(f"📊 {len(new_posts)} پست جدید پیدا شد")
     
-    title_fa = translate_text(latest['title'])
-    summary_fa = translate_text(latest['summary'])
+    for post in new_posts:
+        print(f"🔄 ارسال: {post['title'][:60]}...")
+        
+        title_fa = translate_text(post['title'])
+        summary_fa = translate_text(post['summary']) if post.get('summary') else ""
+        
+        if not title_fa:
+            print("   ⚠️ ترجمه عنوان انجام نشد")
+            continue
+        
+        success_count = 0
+        for chat_id in CHAT_IDS:
+            if send_to_user(
+                chat_id,
+                title_fa,
+                summary_fa,
+                post['link'],
+                post['image_url']
+            ):
+                print(f"   ✅ ارسال شد به {chat_id}")
+                success_count += 1
+            time.sleep(1.5)
+        
+        if success_count == 0:
+            print("   ❌ ارسال به هیچ کاربری موفق نبود")
+        
+        time.sleep(2)
     
-    success_count = 0
-    for chat_id in CHAT_IDS:
-        if send_to_user(
-            chat_id,
-            title_fa,
-            summary_fa,
-            latest['link'],
-            latest['image_url']
-        ):
-            print(f"   ✅ ارسال شد به {chat_id}")
-            success_count += 1
-        time.sleep(1.5)
-    
-    if success_count > 0:
-        save_last_post(latest["id"])
-        print(f"💾 آخرین پست ذخیره شد (ID: {latest['id']})")
+    # ذخیره آخرین پست ارسال شده
+    save_last_post(new_posts[-1]["id"])
+    print(f"💾 آخرین پست ذخیره شد (ID: {new_posts[-1]['id']})")
     
     print("🎉 پایان")
 
