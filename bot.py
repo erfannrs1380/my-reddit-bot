@@ -147,9 +147,12 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
             return False
 
 def get_new_posts():
-    """گرفتن پست‌های جدید از RSS ردیت"""
+    """گرفتن همه پست‌های جدید از آخرین اجرای ربات"""
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
+    
+    if not feed.entries:
+        return []
     
     last_saved = get_last_post()
     new_posts = []
@@ -178,7 +181,6 @@ def get_new_posts():
             'image_url': extract_image_url(entry)
         })
     
-    # برگرداندن پست‌ها از قدیم به جدید
     return list(reversed(new_posts))
 
 def main():
@@ -189,19 +191,18 @@ def main():
         print("✅ پست جدیدی وجود ندارد")
         return
     
-    print(f"📊 {len(new_posts)} پست جدید پیدا شد")
+    print(f"🆕 تعداد پست‌های جدید: {len(new_posts)}")
+    
+    success_posts = []
     
     for post in new_posts:
         print(f"🔄 ارسال: {post['title'][:60]}...")
         
         title_fa = translate_text(post['title'])
-        summary_fa = translate_text(post['summary']) if post.get('summary') else ""
-        
-        if not title_fa:
-            print("   ⚠️ ترجمه عنوان انجام نشد")
-            continue
+        summary_fa = translate_text(post['summary'])
         
         success_count = 0
+        
         for chat_id in CHAT_IDS:
             if send_to_user(
                 chat_id,
@@ -210,18 +211,16 @@ def main():
                 post['link'],
                 post['image_url']
             ):
-                print(f"   ✅ ارسال شد به {chat_id}")
                 success_count += 1
+            
             time.sleep(1.5)
         
-        if success_count == 0:
-            print("   ❌ ارسال به هیچ کاربری موفق نبود")
-        
-        time.sleep(2)
+        if success_count > 0:
+            success_posts.append(post)
     
-    # ذخیره آخرین پست ارسال شده
-    save_last_post(new_posts[-1]["id"])
-    print(f"💾 آخرین پست ذخیره شد (ID: {new_posts[-1]['id']})")
+    if success_posts:
+        save_last_post(success_posts[-1]["id"])
+        print(f"💾 آخرین پست ذخیره شد: {success_posts[-1]['id']}")
     
     print("🎉 پایان")
 
