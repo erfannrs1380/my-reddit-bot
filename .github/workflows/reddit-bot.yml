@@ -8,21 +8,30 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Cache last posts file
+        uses: actions/cache@v4
+        with:
+          path: last_posts.txt
+          key: reddit-last-posts-${{ github.ref }}
+          restore-keys: |
+            reddit-last-posts-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
-        run: pip install feedparser requests deep-translator
-      
+        run: pip install feedparser requests deep-translator beautifulsoup4
+
       - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
+          CHAT_IDS: ${{ secrets.CHAT_IDS }}
           SUBREDDIT: ${{ secrets.SUBREDDIT }}
         run: python bot.py
