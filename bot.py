@@ -7,15 +7,31 @@ from datetime import datetime
 from deep_translator import GoogleTranslator
 from bs4 import BeautifulSoup
 
-# تنظیمات
+# ==================== تنظیمات ====================
 SUBREDDIT = os.environ.get("SUBREDDIT", "SquaredCircle")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# خط درخواستی شما + fallback
-CHAT_IDS = [x.strip() for x in os.environ.get("CHAT_IDS", "8956194322,1386381987").split(",") if x.strip()]
+# اصلاح شده و قوی‌تر
+raw_chat_ids = os.environ.get("CHAT_IDS", "8956194322,1386381987")
+CHAT_IDS = [x.strip() for x in raw_chat_ids.split(",") if x.strip()]
 
 translator = GoogleTranslator(source='auto', target='fa')
 LAST_POSTS_FILE = "last_posts.txt"
+
+# چک کردن اولیه
+print(f"🤖 شروع ربات Reddit به تلگرام - {datetime.now()}")
+print(f"ساب‌ردیت: r/{SUBREDDIT}")
+print(f"چت آیدی‌ها: {CHAT_IDS}")
+print(f"BOT_TOKEN موجود: {'✅ بله' if BOT_TOKEN else '❌ خیر'}")
+
+if not BOT_TOKEN:
+    print("❌ BOT_TOKEN تنظیم نشده!")
+    exit(1)
+if not CHAT_IDS:
+    print("❌ CHAT_IDS تنظیم نشده!")
+    exit(1)
+
+# =================================================
 
 def get_last_post_ids():
     if os.path.exists(LAST_POSTS_FILE):
@@ -76,13 +92,11 @@ def translate_text(text):
 
 def send_to_user(chat_id, title, summary, link, image_url=None):
     link_text = f"[(لینک)]({link})"
-    
     message = f"📝 {title}\n\n"
     if summary and len(summary) > 5:
         message += f"{summary}\n\n"
     message += link_text
 
-    # ارسال عکس
     if image_url:
         try:
             photo_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -92,8 +106,7 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
                 'caption': message,
                 'parse_mode': 'Markdown'
             }
-            response = requests.post(photo_url, data=data, timeout=30)
-            if response.ok:
+            if requests.post(photo_url, data=data, timeout=25).ok:
                 return True
         except:
             pass
@@ -107,17 +120,11 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
             'parse_mode': 'Markdown',
             'disable_web_page_preview': True
         }
-        requests.post(url, data=data, timeout=30)
+        requests.post(url, data=data, timeout=25)
         return True
     except Exception as e:
         print(f"❌ خطا در ارسال به {chat_id}: {e}")
-        # تلاش مجدد بدون Markdown
-        try:
-            data['parse_mode'] = None
-            requests.post(url, data=data, timeout=30)
-            return True
-        except:
-            return False
+        return False
 
 def get_new_posts():
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
@@ -137,14 +144,6 @@ def get_new_posts():
     return new_posts
 
 def main():
-    print(f"🤖 شروع ربات Reddit به تلگرام - {datetime.now()}")
-    print(f"ساب‌ردیت: r/{SUBREDDIT}")
-    print(f"چت آیدی‌ها: {CHAT_IDS}")
-    
-    if not BOT_TOKEN:
-        print("❌ BOT_TOKEN تنظیم نشده است!")
-        return
-
     posts = get_new_posts()
     print(f"📊 {len(posts)} پست جدید پیدا شد")
     
