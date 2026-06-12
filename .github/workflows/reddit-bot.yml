@@ -8,25 +8,15 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Cache last post file
-        uses: actions/cache@v4
         with:
-          path: last_post.txt
-          key: reddit-last-post-${{ github.ref }}
-          restore-keys: |
-            reddit-last-post-
-
-      - name: Debug files
-        run: |
-          ls -la
-          git ls-files | grep last_post || echo "NOT TRACKED"
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,12 +26,6 @@ jobs:
       - name: Install dependencies
         run: pip install feedparser requests deep-translator beautifulsoup4
 
-      - name: Debug last_post
-        run: |
-          echo "------ FILE ------"
-          cat last_post.txt || echo "file not found"
-          echo "------------------"
-
       - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -49,26 +33,14 @@ jobs:
           SUBREDDIT: ${{ secrets.SUBREDDIT }}
         run: python bot.py
 
-      - name: Debug paths
-        run: |
-          pwd
-          find . -name "last_post.txt"
-
-      - name: Check git status
-        run: |
-          git status
-          cat last_post.txt
-
       - name: Commit last_post.txt
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-          
+
           git add last_post.txt
-          
-          echo "===== STATUS ====="
-          git status
-          
-          git diff --cached --quiet || git commit -m "Update last post"
-          
-          git push
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update last post"
+            git push
+          fi
