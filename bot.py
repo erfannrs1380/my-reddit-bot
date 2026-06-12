@@ -185,8 +185,11 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         return False
 
 def get_new_posts():
-    """گرفتن همه پست‌های جدید از آخرین اجرای ربات (نسخه دیباگ)"""
-    url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
+    """گرفتن همه پست‌های جدید از آخرین اجرای ربات با استفاده از /new/.rss"""
+    # استفاده از RSS مخصوص تب New برای دریافت جدیدترین پست‌ها به ترتیب
+    url = f"https://www.reddit.com/r/{SUBREDDIT}/new/.rss"
+    print("RSS URL:", url)
+    
     feed = feedparser.parse(url)
     
     if not feed.entries:
@@ -198,7 +201,8 @@ def get_new_posts():
     print("========== DEBUG ==========")
     print("LAST SAVED:", repr(last_saved))
     
-    for i, entry in enumerate(feed.entries[:15]):
+    # نمایش ۲۰ پست اول RSS برای بررسی ترتیب
+    for i, entry in enumerate(feed.entries[:20]):
         print(f"{i+1}. {entry.id}")
         print(f"   {entry.title}")
     print("===========================")
