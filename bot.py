@@ -7,23 +7,23 @@ from datetime import datetime
 from deep_translator import GoogleTranslator
 from bs4 import BeautifulSoup
 
-# تنظیمات از Environment Variables
+# تنظیمات
 SUBREDDIT = os.environ.get("SUBREDDIT", "SquaredCircle")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_IDS = [x.strip() for x in os.environ.get("CHAT_IDS", "8956194322,1386381987").split(",")]
+
+# خط درخواستی شما + fallback
+CHAT_IDS = [x.strip() for x in os.environ.get("CHAT_IDS", "8956194322,1386381987").split(",") if x.strip()]
 
 translator = GoogleTranslator(source='auto', target='fa')
 LAST_POSTS_FILE = "last_posts.txt"
 
 def get_last_post_ids():
-    """خواندن آیدی پست‌های قبلی"""
     if os.path.exists(LAST_POSTS_FILE):
         with open(LAST_POSTS_FILE, 'r') as f:
             return {line.strip() for line in f if line.strip()}
     return set()
 
 def save_post_ids(new_ids):
-    """ذخیره آیدی پست‌های جدید"""
     if not new_ids:
         return
     with open(LAST_POSTS_FILE, 'a') as f:
@@ -32,7 +32,6 @@ def save_post_ids(new_ids):
     print(f"💾 {len(new_ids)} پست جدید ذخیره شد")
 
 def clean_html(text):
-    """پاک کردن HTML و متن‌های اضافی"""
     if not text:
         return ""
     soup = BeautifulSoup(text, 'html.parser')
@@ -45,31 +44,25 @@ def clean_html(text):
     return text.strip()
 
 def extract_image_url(entry):
-    """استخراج آدرس تصویر"""
-    # از summary
     if hasattr(entry, 'summary'):
         soup = BeautifulSoup(entry.summary, 'html.parser')
         img = soup.find('img')
         if img and img.get('src'):
             return img['src']
     
-    # از لینک‌ها
     if hasattr(entry, 'links'):
         for link in entry.links:
             href = link.get('href', '').lower()
             if any(ext in href for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
                 return link.get('href')
     
-    # جستجو با regex
     if hasattr(entry, 'summary'):
         urls = re.findall(r'https?://[^\s]+?\.(?:jpg|jpeg|png|gif|webp)', entry.summary, re.I)
         if urls:
             return urls[0]
-    
     return None
 
 def translate_text(text):
-    """ترجمه متن به فارسی"""
     try:
         text = clean_html(text)
         if not text or len(text) < 5:
@@ -82,7 +75,6 @@ def translate_text(text):
         return text[:500] if text else ""
 
 def send_to_user(chat_id, title, summary, link, image_url=None):
-    """ارسال پیام به تلگرام"""
     link_text = f"[(لینک)]({link})"
     
     message = f"📝 {title}\n\n"
@@ -90,7 +82,7 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         message += f"{summary}\n\n"
     message += link_text
 
-    # ارسال به صورت عکس اگر تصویر داشته باشد
+    # ارسال عکس
     if image_url:
         try:
             photo_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -104,7 +96,7 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
             if response.ok:
                 return True
         except:
-            pass  # اگر ارسال عکس شکست خورد، متن را ارسال می‌کنیم
+            pass
 
     # ارسال متن
     try:
@@ -118,20 +110,22 @@ def send_to_user(chat_id, title, summary, link, image_url=None):
         requests.post(url, data=data, timeout=30)
         return True
     except Exception as e:
-        print(f"خطا در ارسال پیام: {e}")
-        # ارسال بدون Markdown
-        data['parse_mode'] = None
-        requests.post(url, data=data, timeout=30)
-        return True
+        print(f"❌ خطا در ارسال به {chat_id}: {e}")
+        # تلاش مجدد بدون Markdown
+        try:
+            data['parse_mode'] = None
+            requests.post(url, data=data, timeout=30)
+            return True
+        except:
+            return False
 
 def get_new_posts():
-    """گرفتن پست‌های جدید"""
     url = f"https://www.reddit.com/r/{SUBREDDIT}/.rss"
     feed = feedparser.parse(url)
     last_ids = get_last_post_ids()
     new_posts = []
     
-    for entry in feed.entries[:15]:  # بررسی ۱۵ پست آخر
+    for entry in feed.entries[:20]:
         if entry.id not in last_ids:
             new_posts.append({
                 'id': entry.id,
@@ -145,7 +139,12 @@ def get_new_posts():
 def main():
     print(f"🤖 شروع ربات Reddit به تلگرام - {datetime.now()}")
     print(f"ساب‌ردیت: r/{SUBREDDIT}")
+    print(f"چت آیدی‌ها: {CHAT_IDS}")
     
+    if not BOT_TOKEN:
+        print("❌ BOT_TOKEN تنظیم نشده است!")
+        return
+
     posts = get_new_posts()
     print(f"📊 {len(posts)} پست جدید پیدا شد")
     
@@ -155,7 +154,7 @@ def main():
 
     new_ids = []
     for post in posts:
-        print(f"🔄 پردازش: {post['title'][:60]}...")
+        print(f"🔄 پردازش: {post['title'][:70]}...")
         
         title_fa = translate_text(post['title'])
         summary_fa = translate_text(post['summary']) if post.get('summary') else ""
@@ -163,12 +162,15 @@ def main():
         if not title_fa:
             continue
             
+        success_count = 0
         for chat_id in CHAT_IDS:
             if send_to_user(chat_id, title_fa, summary_fa, post['link'], post['image_url']):
                 print(f"   ✅ ارسال شد به {chat_id}")
-            time.sleep(1.2)  # جلوگیری از rate limit
+                success_count += 1
+            time.sleep(1.5)
         
-        new_ids.append(post['id'])
+        if success_count > 0:
+            new_ids.append(post['id'])
         time.sleep(2)
 
     save_post_ids(new_ids)
