@@ -42,7 +42,14 @@ def get_last_post():
     """خواندن آخرین پست ذخیره شده از فایل"""
     if os.path.exists(LAST_POST_FILE):
         with open(LAST_POST_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
+            value = f.read().strip()
+            
+            # اگر مسیر یا آدرس کامل ذخیره شده بود، فقط آخرین بخش (شناسه) را بگیر
+            if "/" in value:
+                value = value.split("/")[-1]
+            
+            return value
+    
     return ""
 
 def save_last_post(post_id):
