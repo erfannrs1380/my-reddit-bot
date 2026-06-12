@@ -102,49 +102,87 @@ def translate_text(text):
         return text[:500] if text else ""
 
 def send_to_user(chat_id, title, summary, link, image_url=None):
-    """ارسال پست به تلگرام (با عکس یا متن ساده)"""
-    link_text = f"[(لینک)]({link})"
+    """ارسال پست به تلگرام با دکمه شیشه‌ای"""
     
     message = f"📝 {title}\n\n"
+    
     if summary and len(summary) > 5:
         message += f"{summary}\n\n"
-    message += link_text
-
-    # ارسال به صورت عکس اگر تصویر داشته باشد
+    
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "📖 مشاهده پست",
+                    "url": link
+                }
+            ],
+            [
+                {
+                    "text": "💬 کامنت‌ها",
+                    "url": link
+                }
+            ],
+            [
+                {
+                    "text": f"🔥 r/{SUBREDDIT}",
+                    "url": f"https://reddit.com/r/{SUBREDDIT}"
+                }
+            ]
+        ]
+    }
+    
+    # محدودیت کپشن عکس تلگرام (حداکثر 1024 کاراکتر)
+    photo_caption = message
+    if len(photo_caption) > 1000:
+        photo_caption = photo_caption[:1000] + "..."
+    
+    # ارسال همراه عکس
     if image_url:
         try:
             photo_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+            
             data = {
-                'chat_id': chat_id,
-                'photo': image_url,
-                'caption': message,
-                'parse_mode': 'Markdown'
+                "chat_id": chat_id,
+                "photo": image_url,
+                "caption": photo_caption,
+                "reply_markup": json.dumps(keyboard)
             }
-            response = requests.post(photo_url, data=data, timeout=25)
+            
+            response = requests.post(
+                photo_url,
+                data=data,
+                timeout=25
+            )
+            
             if response.ok:
                 return True
-        except:
-            pass
-
-    # ارسال متن ساده
+                
+        except Exception as e:
+            print(f"⚠️ خطا در ارسال عکس: {e}")
+    
+    # ارسال متنی
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        
         data = {
-            'chat_id': chat_id,
-            'text': message,
-            'parse_mode': 'Markdown',
-            'disable_web_page_preview': True
+            "chat_id": chat_id,
+            "text": message,
+            "disable_web_page_preview": True,
+            "reply_markup": json.dumps(keyboard)
         }
-        requests.post(url, data=data, timeout=25)
-        return True
+        
+        response = requests.post(
+            url,
+            data=data,
+            timeout=25
+        )
+        
+        return response.ok
+        
     except Exception as e:
         print(f"❌ خطا در ارسال به {chat_id}: {e}")
-        try:
-            data['parse_mode'] = None
-            requests.post(url, data=data, timeout=25)
-            return True
-        except:
-            return False
+        return False
 
 def get_new_posts():
     """گرفتن همه پست‌های جدید از آخرین اجرای ربات"""
