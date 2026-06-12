@@ -23,6 +23,11 @@ jobs:
           restore-keys: |
             reddit-last-post-
 
+      - name: Debug files
+        run: |
+          ls -la
+          git ls-files | grep last_post || echo "NOT TRACKED"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
