@@ -46,7 +46,10 @@ def get_last_post():
     return ""
 
 def save_last_post(post_id):
-    """ذخیره آخرین پست در فایل"""
+    """ذخیره آخرین پست در فایل (فقط شناسه)"""
+    # استخراج شناسه خالص از entry.id (مثلاً t3_1u3r6da)
+    if '/' in post_id:
+        post_id = post_id.split('/')[-1]
     with open(LAST_POST_FILE, "w", encoding="utf-8") as f:
         f.write(post_id)
 
@@ -203,7 +206,9 @@ def get_new_posts():
     
     # نمایش ۲۰ پست اول RSS برای بررسی ترتیب
     for i, entry in enumerate(feed.entries[:20]):
-        print(f"{i+1}. {entry.id}")
+        # استخراج شناسه خالص برای نمایش
+        post_id = entry.id.split('/')[-1] if '/' in entry.id else entry.id
+        print(f"{i+1}. {post_id}")
         print(f"   {entry.title}")
     print("===========================")
     
@@ -221,8 +226,11 @@ def get_new_posts():
         ]):
             continue
         
+        # استخراج شناسه خالص از entry.id برای مقایسه
+        current_id = entry.id.split('/')[-1] if '/' in entry.id else entry.id
+        
         # اگر به پست ذخیره شده رسیدیم، متوقف شو
-        if entry.id == last_saved:
+        if current_id == last_saved:
             print("FOUND LAST SAVED -> STOP")
             break
         
@@ -274,8 +282,10 @@ def main():
             success_posts.append(post)
     
     if success_posts:
-        save_last_post(success_posts[-1]["id"])
-        print(f"💾 آخرین پست ذخیره شد: {success_posts[-1]['id']}")
+        # ذخیره فقط شناسه خالص (بدون بخش‌های اضافی)
+        last_post_id = success_posts[-1]["id"]
+        save_last_post(last_post_id)
+        print(f"💾 آخرین پست ذخیره شد: {last_post_id.split('/')[-1] if '/' in last_post_id else last_post_id}")
     
     print("🎉 پایان")
 
