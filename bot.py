@@ -72,6 +72,13 @@ def clean_html(text):
     text = re.sub(r'\|\s*\d+\s*votes?', '', text, flags=re.I)
     text = re.sub(r'\d+\s*comments?', '', text, flags=re.I)
     text = re.sub(r'From the \w+ community on Reddit:', '', text, flags=re.I)
+    
+    # حذف متن‌های اضافی ترجمه
+    text = re.sub(r'\[(?:لینک|نظر|نظرات|comments?)\]', '', text, flags=re.I)
+    
+    # حذف فاصله‌های اضافی
+    text = re.sub(r'\s+', ' ', text)
+    
     return text.strip()
 
 def extract_image_url(entry):
